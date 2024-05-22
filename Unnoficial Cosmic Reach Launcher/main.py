@@ -20,9 +20,10 @@ class CosmicReachLauncher(QWidget):
         
         self.config = configparser.ConfigParser()
         self.config.read('config.ini')
-        self.load_instance_buttons() 
-
+        
+        self.load_instance_buttons()
         self.init_ui()
+        self.load_theme()  # Load the theme based on saved configuration after initializing UI
         self.check_and_update_text_file()
 
     def init_ui(self):
@@ -32,6 +33,11 @@ class CosmicReachLauncher(QWidget):
         # Create tabs
         home_tab = QWidget()
         settings_tab = QWidget()
+        
+        # Initialize edit_button
+        self.edit_mode = False
+        self.edit_button = QPushButton("Edit Instance")
+        self.edit_button.clicked.connect(self.toggle_edit_mode)
 
         # Add tabs to QTabWidget
         tabs.addTab(home_tab, "Home")
@@ -54,9 +60,9 @@ class CosmicReachLauncher(QWidget):
         self.visualmodeDropDown.addItem("Auto")
         title_settings_info = QLabel("<u>Info</u>")
         title_settings_info.setStyleSheet("font-size: 16px;")
-        title_settings_info_version = QLabel("U.C.R.L 0.0.3")
-        title_settings_info_contact = QLabel("By IEatSoulsMeow") # - Maybe include contact info in the future
-        title_settings_info_link = QLabel("github.com/IEatSoulsMeow/unnoficial_cosmic_reach_launcher") #('<a href="https://github.com/IEatSoulsMeow/unnoficial_cosmic_reach_launcher/commits/main/">github.com/IEatSoulsMeow/unnoficial_cosmic_reach_launcher/commits/main</a>', self) // Will add this when I can figure out how to colour links
+        title_settings_info_version = QLabel("U.C.R.L 0.0.4")
+        title_settings_info_contact = QLabel("By IEatSoulsMeow - contact@darkmodecats.com")
+        title_settings_info_link = QLabel("github.com/IEatSoulsMeow/unnoficial_cosmic_reach_launcher") 
         title_settings_info_link.setOpenExternalLinks(True)
 
         # Connect the signal of the combo box to a slot function
@@ -92,9 +98,6 @@ class CosmicReachLauncher(QWidget):
         settings_tab_layout.addWidget(scroll_area)
         settings_tab.setLayout(settings_tab_layout)
 
-        # Create widgets for Home
-        label = QLabel("This is home menu")
-        
         # Create a scroll area for the home tab
         home_scroll_area = QScrollArea()
         home_scroll_area.setWidgetResizable(True)
@@ -103,14 +106,15 @@ class CosmicReachLauncher(QWidget):
         home_container = QWidget()
         self.home_layout = QVBoxLayout()  # Change to instance variable to add buttons later
 
-        # Add label to the home layout
-        self.home_layout.addWidget(label)
-        self.add_instance_buttons()  # Add this line to add instance buttons
+        self.add_instance_buttons()
 
         # Add "Add Instance" button at the bottom
         add_instance_button = QPushButton("Add Instance")
         add_instance_button.clicked.connect(self.add_instance)
         self.home_layout.addWidget(add_instance_button)
+        
+        # Add "Edit Instance" button below "Add Instance" button
+        self.home_layout.addWidget(self.edit_button)
 
         self.home_layout.addStretch()
         home_container.setLayout(self.home_layout)
@@ -180,6 +184,15 @@ class CosmicReachLauncher(QWidget):
             self.config['DEFAULT']['Path'] = new_file_path
             with open('config.ini', 'w') as configfile:
                 self.config.write(configfile)
+                
+    def update_instance_button_text_and_path(self, old_name, new_name):  # Updated method to update button text and path
+        for i in range(self.home_layout.count()):
+            widget = self.home_layout.itemAt(i).widget()
+            if isinstance(widget, QPushButton) and widget.text().strip() == old_name:
+                widget.setText("  " + new_name)
+                widget.clicked.disconnect()  # Disconnect previous connections
+                widget.clicked.connect(lambda _, n=new_name: self.handle_instance_button(n))
+                break
     
     def change_theme(self, index):
         # Get the selected item text
@@ -204,75 +217,116 @@ class CosmicReachLauncher(QWidget):
             self.config.write(configfile)
     
     def load_theme(self):
-        # Load the saved theme mode from config.ini
+    # Load the saved theme mode from config.ini
         if 'ThemeMode' in self.config['DEFAULT']:
             theme_mode = self.config['DEFAULT']['ThemeMode']
             if theme_mode == "Dark":
                 QApplication.instance().setStyleSheet(qdarktheme.load_stylesheet())
+                self.visualmodeDropDown.setCurrentIndex(0)
             elif theme_mode == "Light":
                 QApplication.instance().setStyleSheet("")
+                self.visualmodeDropDown.setCurrentIndex(1)
             elif theme_mode == "Auto":
                 if darkdetect.theme() == "Dark":
                     QApplication.instance().setStyleSheet(qdarktheme.load_stylesheet())
                 else:
                     QApplication.instance().setStyleSheet("")
-                pass
+                self.visualmodeDropDown.setCurrentIndex(2)
+        else:
+            # Theme mode is not specified, default to "Auto"
+            if darkdetect.theme() == "Dark":
+                QApplication.instance().setStyleSheet(qdarktheme.load_stylesheet())
+                self.visualmodeDropDown.setCurrentIndex(2)
+            else:
+                QApplication.instance().setStyleSheet("")
+                self.visualmodeDropDown.setCurrentIndex(1)
+            
+            # Save the default theme mode to config.ini
+            self.config['DEFAULT']['ThemeMode'] = "Auto"
+            with open('config.ini', 'w') as configfile:
+                self.config.write(configfile)
     
     def load_instance_buttons(self):
         if 'Instances' not in self.config.sections():
             self.config.add_section('Instances')
 
     def add_instance_buttons(self):
-        if 'Instances' in self.config.sections():
-            for name, path in self.config.items('Instances'):
-                if name != 'path' and name != 'thememode':  # Ensure not loading default keys
-                    print(name)
-                    button = QPushButton("  " + name)
-                    button.clicked.connect(lambda _, p=path: self.run_instance(p))
-                    button.setIcon(QIcon("assets/ucrl_icon.png"))
-                    
-                    edit_button = QPushButton("Edit")
-                    edit_button.clicked.connect(lambda _, n=name, p=path: self.edit_instance(n, p))
-                    
-                    h_layout = QHBoxLayout()
-                    h_layout.addWidget(button)
-                    h_layout.addWidget(edit_button)
-                    
-                    container = QWidget()
-                    container.setLayout(h_layout)
-                    self.home_layout.addWidget(container)
+        if 'Instances' in self.config:
+            for instance in self.config['Instances']:
+                # Exclude 'Path' and 'ThemeMode' keys
+                if instance.lower() not in ['path', 'thememode']:
+                    instance_button = QPushButton("  " + instance)  # Add space for icon
+                    instance_button.clicked.connect(lambda _, name=instance: self.handle_instance_button(name))
+                    instance_button.setIcon(QIcon("assets/ucrl_icon.png"))  # Add icon
+                    self.home_layout.addWidget(instance_button)
+    
+    def handle_instance_button(self, name):  # Updated method to handle instance button click
+        path = self.config['Instances'].get(name, None)
+        if path:
+            if self.edit_mode:
+                self.edit_instance(name, path)
+            else:
+                self.run_instance(path)
+    
+    def toggle_edit_mode(self):
+        self.edit_mode = not self.edit_mode
+        if hasattr(self, 'edit_button'):
+            if self.edit_mode:
+                self.edit_button.setText("Cancel Edit")
+            else:
+                self.edit_button.setText("Edit Instance")
+        else:
+            print("Edit button does not exist.")
+
     
     def edit_instance(self, name, path):
-        edit_dialog = QDialog(self)
-        edit_dialog.setWindowTitle("Edit Instance")
-        edit_dialog.setWindowModality(Qt.ApplicationModal)
-        edit_dialog.setMinimumSize(400, 200)
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Instance")
 
-        layout = QVBoxLayout()
-
-        name_label = QLabel("Instance Name:")
-        name_input = QLineEdit()
-        name_input.setText(name)
-        
-        path_label = QLabel("Instance Location:")
-        path_input = QLineEdit()
-        path_input.setText(path)
-
-        select_loc_button = QPushButton("Select Location")
-        select_loc_button.clicked.connect(lambda: self.select_location_for_edit(path_input))
+        name_label = QLabel("Name:")
+        path_label = QLabel("Path:")
+        name_edit = QLineEdit(name)
+        path_edit = QLineEdit(path)
+        select_location_button = QPushButton("Select Location")
+        select_location_button.clicked.connect(lambda: self.select_location_dialog(path_edit))
 
         save_button = QPushButton("Save")
-        save_button.clicked.connect(lambda: self.save_instance_edit(name, name_input.text(), path_input.text(), edit_dialog))
+        save_button.clicked.connect(lambda: self.save_instance_edit(dialog, name, name_edit.text(), path_edit.text()))
 
+        delete_button = QPushButton("Delete")  # New delete button
+        delete_button.setStyleSheet("background-color: red; color: white;")
+        delete_button.clicked.connect(lambda: self.delete_instance(dialog, name))
+
+        layout = QVBoxLayout()
         layout.addWidget(name_label)
-        layout.addWidget(name_input)
+        layout.addWidget(name_edit)
         layout.addWidget(path_label)
-        layout.addWidget(path_input)
-        layout.addWidget(select_loc_button)
+        layout.addWidget(path_edit)
+        layout.addWidget(select_location_button)
         layout.addWidget(save_button)
+        layout.addWidget(delete_button)  # Add the delete button to the layout
+        dialog.setLayout(layout)
+        dialog.exec_()
 
-        edit_dialog.setLayout(layout)
-        edit_dialog.exec_()
+    def delete_instance(self, dialog, name):
+        reply = QMessageBox.question(self, 'Delete Instance', f"Are you sure you want to delete the instance '{name}'?",
+                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.config.remove_option('Instances', name)
+            with open('config.ini', 'w') as configfile:
+                self.config.write(configfile)
+            
+            dialog.accept()
+            self.remove_instance_button(name)
+            self.update_instance_buttons()
+    
+    def remove_instance_button(self, name):
+        for i in reversed(range(self.home_layout.count())):
+            widget = self.home_layout.itemAt(i).widget()
+            if isinstance(widget, QPushButton) and widget.text().strip() == name:
+                self.home_layout.removeWidget(widget)
+                widget.deleteLater()
+                break
 
     def add_instance(self):
         name, ok = QInputDialog.getText(self, 'Add Instance', 'Enter instance name:')
@@ -282,7 +336,15 @@ class CosmicReachLauncher(QWidget):
                 self.config.set('Instances', name, file_path)
                 with open('config.ini', 'w') as configfile:
                     self.config.write(configfile)
-                self.update_instance_buttons()
+                # Instead of updating all buttons, add only the new one
+                self.add_single_instance_button(name)
+                
+    def add_single_instance_button(self, name):
+        button = QPushButton("  " + name)
+        button.clicked.connect(lambda _, n=name: self.handle_instance_button(n))
+        button.setIcon(QIcon("assets/ucrl_icon.png"))
+        # Insert the new button before the "Add Instance" and "Edit Instance" buttons
+        self.home_layout.insertWidget(self.home_layout.count() - 3, button)
 
     def run_instance(self, path):
         if path:
@@ -295,40 +357,94 @@ class CosmicReachLauncher(QWidget):
                 subprocess.run(["javac", path])
                 java_file_name = os.path.splitext(os.path.basename(path))[0]
                 subprocess.run(["java", java_file_name])
+            elif file_ext == ".jar":
+                subprocess.run(["java", "-jar", path])
             else:
                 print("Unsupported file type")
                 
     # Add a method to clear and reload instance buttons
     def update_instance_buttons(self):
+        # Clear the layout before re-adding widgets
+        while self.home_layout.count():
+            child = self.home_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        # Re-add instance buttons
+        self.add_instance_buttons()
+
+        # Add "Add Instance" button
+        add_instance_button = QPushButton("Add Instance")
+        add_instance_button.clicked.connect(self.add_instance)
+        edit_instance_button = QPushButton("Edit Instance")
+        edit_instance_button.clicked.connect(self.toggle_edit_mode)
+        self.home_layout.addWidget(add_instance_button)
+        self.home_layout.addWidget(edit_instance_button)
+
+        # Add stretch to push buttons to the top
+        self.home_layout.addStretch()
+    
+    def clear_instance_buttons(self):  # New method to clear instance buttons only
         for i in reversed(range(self.home_layout.count())):
             widget = self.home_layout.itemAt(i).widget()
-            if widget is not None:
+            if isinstance(widget, QPushButton) and widget not in [self.edit_button, self.home_layout.itemAt(self.home_layout.count() - 1).widget()]:
+                print(f"Removing widget: {widget}")
                 widget.deleteLater()
-        self.add_instance_buttons()
+                
+    def add_edit_and_add_buttons(self):
+        # Add "Add Instance" button
         add_instance_button = QPushButton("Add Instance")
         add_instance_button.clicked.connect(self.add_instance)
         self.home_layout.addWidget(add_instance_button)
+
+        # Ensure the "Edit Instance" button is visible and properly added
+        self.home_layout.addWidget(self.edit_button)
+        self.edit_button.setVisible(True)
         self.home_layout.addStretch()
-    
+
     def select_location_for_edit(self, path_input):
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(self, "Select New Instance Location", "", "Executable Files (*.exe);;All Files (*)", options=options)
         if file_path:
             path_input.setText(file_path)
+            
+    def select_location_dialog(self, path_edit):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Instance Location", "", "Executable Files (*.exe);;All Files (*)")
+        if file_path:
+            path_edit.setText(file_path)
         
-    def save_instance_edit(self, old_name, new_name, new_path, dialog):
-        if new_name and new_path:
-            self.config.remove_option('Instances', old_name)
-            self.config.set('Instances', new_name, new_path)
+    def save_instance_edit(self, dialog, old_name, new_name, path):  # Updated function to accept dialog object
+        old_path = self.config['Instances'].get(old_name, None)
+        if new_name != old_name or path != old_path:  # Check if either name or path is updated
+            if new_name != old_name:
+                self.config.remove_option('Instances', old_name)
+            self.config.set('Instances', new_name, path)
             with open('config.ini', 'w') as configfile:
                 self.config.write(configfile)
-            self.update_instance_buttons()
+            
             dialog.accept()
+            
+            # Update the corresponding button without removing and re-adding all buttons
+            self.update_instance_button_text_and_path(old_name, new_name)
+            
+            # Disable edit mode before updating instance buttons
+            self.edit_mode = False
+            self.edit_button.setText("Edit Instance")
+            
+        else:
+            print("No changes made")
+            dialog.accept()
+            
+    def update_instance_button_text(self, old_name, new_name):  # New method to update button text
+        for i in range(self.home_layout.count()):
+            widget = self.home_layout.itemAt(i).widget()
+            if isinstance(widget, QPushButton) and widget.text().strip() == old_name:
+                widget.setText("  " + new_name)
+                break
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
-    app.setStyleSheet(qdarktheme.load_stylesheet())
     launcher = CosmicReachLauncher()
     launcher.show()
     sys.exit(app.exec_())

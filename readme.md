@@ -1,6 +1,7 @@
 # Unnoficial Cosmic Reach Launcher
 
 This project is <sub>(going to be)</sub> a launcher and instance manager for the game [Cosmic Reach](https://finalforeach.itch.io/cosmic-reach)
+Current version: 0.0.4
 
 ## Authors
 
